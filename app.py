@@ -5,55 +5,57 @@ import pandas as pd
 import re
 import io
 
-st.set_page_config(page_title="Orka Fiş Asistanı", layout="wide")
-st.title("🚀 Orka Hatasız Fiş Dönüştürücü")
+st.set_page_config(page_title="Orka Fatura Asistanı", layout="wide")
+st.title("📄 Orka Fatura Listesi Dönüştürücü")
 
-# Tarih Seçimi
-secilen_tarih = st.date_input("Fişlerin Tarihini Seçin", pd.to_datetime("today"))
+secilen_tarih = st.date_input("Belge Tarihi Seçin", pd.to_datetime("today"))
 formatli_tarih = secilen_tarih.strftime("%d.%m.%Y")
 
-uploaded_files = st.file_uploader("Fiş Fotoğraflarını Seçin", accept_multiple_files=True)
+uploaded_files = st.file_uploader("Fiş/Fatura Fotoğraflarını Seçin", accept_multiple_files=True)
 
-def analiz_et(file, sabitle_tarih):
+def analiz_et(file, tarih):
     try:
         img = Image.open(file)
         text = pytesseract.image_to_string(img, lang='tur')
         
-        # TUTAR BULMA
+        # TUTAR VE VERGİ NO BULMA (Basit mantık)
         fiyatlar = re.findall(r'(\d+[\.,]\d{2})', text)
-        tutar = max([float(f.replace(',', '.')) for f in fiyatlar]) if fiyatlar else 0.0
+        genel_toplam = max([float(f.replace(',', '.')) for f in fiyatlar]) if fiyatlar else 0.0
+        v_no = re.search(r'(\d{10,11})', text).group(1) if re.search(r'(\d{10,11})', text) else ""
+        b_no = re.search(r'(\d{3,})', text).group(1) if re.search(r'(\d{3,})', text) else "1"
         
-        # BELGE NO BULMA
-        b_no_match = re.search(r'(\d{7,})', text)
-        b_no = b_no_match.group(1) if b_no_match else "0001"
+        if genel_toplam <= 0: return None
         
-        if tutar <= 0: return []
-        matrah = round(tutar / 1.01, 2)
-        kdv = round(tutar - matrah, 2)
+        kdv_tutar = round(genel_toplam - (genel_toplam / 1.10), 2) # %10 varsayılan
+        alis_tutar = round(genel_toplam - kdv_tutar, 2)
         
-        return [
-            [sabitle_tarih, '153.01.001', 'Mal Alimi', matrah, 0, f"'{b_no}", 'F'],
-            [sabitle_tarih, '191.01.001', 'KDV %1', kdv, 0, f"'{b_no}", 'F'],
-            [sabitle_tarih, '100.01.001', 'Nakit Odeme', 0, tutar, f"'{b_no}", 'F']
-        ]
-    except: return []
+        return {
+            "belge tarihi": tarih,
+            "belge no": b_no,
+            "kdv oranı": 10,
+            "vergi no": v_no,
+            "firma adı": "FİŞTEN OKUNAN İŞLETME",
+            "alış tutar": alis_tutar,
+            "kdv tutar": kdv_tutar,
+            "genel toplam": genel_toplam
+        }
+    except: return None
 
 if uploaded_files:
-    data = []
+    sonuclar = []
     for f in uploaded_files:
-        data.extend(analiz_et(f, formatli_tarih))
+        res = analiz_et(f, formatli_tarih)
+        if res: sonuclar.append(res)
     
-    if data:
-        df = pd.DataFrame(data, columns=['Tarih', 'Hesap_Kod', 'Aciklama', 'Borc', 'Alacak', 'Belge_No', 'Belge_Turu'])
-        st.subheader("Önizleme")
+    if sonuclar:
+        df = pd.DataFrame(sonuclar)
         st.table(df)
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Orka')
-            # OTOMATİK GENİŞLETME AYARI
-            worksheet = writer.sheets['Orka']
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            ws = writer.sheets['Sheet1']
             for idx, col in enumerate(df.columns):
-                worksheet.column_dimensions[chr(65 + idx)].width = 25
+                ws.column_dimensions[chr(65 + idx)].width = 20
         
-        st.download_button("📥 HATASIZ EXCEL'İ İNDİR", output.getvalue(), "Orka_Aktarim.xlsx")
+        st.download_button("📥 ORKA EXCEL'İNİ İNDİR", output.getvalue(), "Orka_Fatura_Listesi.xlsx")
