@@ -8,8 +8,8 @@ import io
 st.set_page_config(page_title="Orka Fiş Asistanı", layout="wide")
 st.title("🚀 Orka Hatasız Fiş Dönüştürücü")
 
-# Kullanıcıdan Manuel Tarih Girişi (Hataları önlemek için)
-secilen_tarih = st.date_input("Fişlerin Tarihini Seçin (Otomatik düzeltme için)", pd.to_datetime("today"))
+# Tarih Seçimi
+secilen_tarih = st.date_input("Fişlerin Tarihini Seçin", pd.to_datetime("today"))
 formatli_tarih = secilen_tarih.strftime("%d.%m.%Y")
 
 uploaded_files = st.file_uploader("Fiş Fotoğraflarını Seçin", accept_multiple_files=True)
@@ -45,11 +45,15 @@ if uploaded_files:
     
     if data:
         df = pd.DataFrame(data, columns=['Tarih', 'Hesap_Kod', 'Aciklama', 'Borc', 'Alacak', 'Belge_No', 'Belge_Turu'])
-        st.subheader("Önizleme (Orka'ya Uygun)")
+        st.subheader("Önizleme")
         st.table(df)
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
+            df.to_excel(writer, index=False, sheet_name='Orka')
+            # OTOMATİK GENİŞLETME AYARI
+            worksheet = writer.sheets['Orka']
+            for idx, col in enumerate(df.columns):
+                worksheet.column_dimensions[chr(65 + idx)].width = 25
         
         st.download_button("📥 HATASIZ EXCEL'İ İNDİR", output.getvalue(), "Orka_Aktarim.xlsx")
